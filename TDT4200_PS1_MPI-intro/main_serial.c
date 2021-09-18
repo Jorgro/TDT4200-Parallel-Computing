@@ -74,7 +74,7 @@ int main(int argc, char** argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-	printf("Hello world from processor: Rank %d out of %d processors\n",
+	printf("Rank %d out of %d processors\n",
            rank, comm_size);
 
 	pixel* pixels_in;
@@ -92,17 +92,15 @@ int main(int argc, char** argv)
 		printf("Image dimensions: %dx%d\n", in_width, in_height);
 	}
 
+	// Broadcast image dimensions
 	MPI_Bcast(&in_width, 1, MPI_INT, root, MPI_COMM_WORLD);
 	MPI_Bcast(&in_height, 1, MPI_INT, root, MPI_COMM_WORLD);
 
+	// Allocate for all other processes than root
 	if (rank != root) {
-		printf("Width: %d, Height: %d\n", in_width, in_height);
-		pixels_in = malloc(in_width*in_height*sizeof(pixel));
+		pixels_in = (pixel*) malloc(in_width*in_height*sizeof(pixel));
 	}
-	printf("Sending image:");
-	int k = MPI_Bcast(pixels_in, in_width*in_height*4, MPI_UNSIGNED_CHAR, root, MPI_COMM_WORLD);
-	printf("k: %d", k);
-
+	MPI_Bcast(pixels_in, in_width*in_height*4, MPI_UNSIGNED_CHAR, root, MPI_COMM_WORLD);
 
 	double scale_x = argc > 2 ? atof(argv[2]): 2;
 	double scale_y = argc > 3 ? atof(argv[3]): 8;
@@ -110,38 +108,33 @@ int main(int argc, char** argv)
 	int out_width = in_width * scale_x;
 	int out_height = in_height * scale_y;
 
-//TODO 3 - partitioning
-	/* int local_width = in_width;
-	int local_height = in_height; */
+	int local_width = in_width;
+	// Divide height equally between number of processes
+	int local_height = in_height / comm_size;
 
 	int local_out_width = out_width;
-	int local_out_height = out_height;
+	int local_out_height = out_height / comm_size;
 
 	pixel* local_out = (pixel *) malloc(sizeof(pixel) * local_out_width * local_out_height);
-//TODO END
 
-
-//TODO 4 - computation
 	for(int i = 0; i < local_out_height; i++) {
 		for(int j = 0; j < local_out_width; j++) {
 			pixel new_pixel;
-
-			float row = i * (in_height-1) / (float)out_height;
+			// i is offsetted by the local_out_height (which is equal for all processes) times the rank of the process
+			float row = (i+local_out_height*rank) * (in_height-1) / (float)out_height;
 			float col = j * (in_width-1) / (float)out_width;
-
 			bilinear(pixels_in, row, col, &new_pixel, in_width, in_height);
-
-			local_out[i*out_width+j] = new_pixel;
+			local_out[i*local_out_width+j] = new_pixel;
 		}
 	}
-//TODO END
 
+	pixel* pixels_out = (pixel *) malloc(sizeof(pixel) * out_width * out_height);
+	// Gather from all processes
+	MPI_Gather(local_out, local_out_width*local_out_height*4, MPI_UNSIGNED_CHAR, pixels_out, local_out_width*local_out_height*4, MPI_UNSIGNED_CHAR, root,
+           MPI_COMM_WORLD);
+	stbi_write_png("output.png", out_width, out_height, STBI_rgb_alpha, pixels_out, sizeof(pixel) * out_width);
 
-//TODO 5 - gather
-/* 	pixel* pixels_out = local_out;
-	stbi_write_png("output.png", out_width, out_height, STBI_rgb_alpha, pixels_out, sizeof(pixel) * out_width); */
-//TODO END
-
+	printf("Operation finished.\n");
 
 	MPI_Finalize();
 	return 0;
