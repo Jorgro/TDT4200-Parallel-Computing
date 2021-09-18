@@ -77,7 +77,6 @@ int main(int argc, char** argv)
 	printf("Hello world from processor: Rank %d out of %d processors\n",
            rank, comm_size);
 
-
 	pixel* pixels_in;
 
 	int in_width;
@@ -92,13 +91,16 @@ int main(int argc, char** argv)
 		}
 		printf("Image dimensions: %dx%d\n", in_width, in_height);
 	}
+
 	MPI_Bcast(&in_width, 1, MPI_INT, root, MPI_COMM_WORLD);
 	MPI_Bcast(&in_height, 1, MPI_INT, root, MPI_COMM_WORLD);
+
 	if (rank != root) {
+		printf("Width: %d, Height: %d\n", in_width, in_height);
 		pixels_in = malloc(in_width*in_height*sizeof(pixel));
-		printf("Width: %d, Height:", in_width);
 	}
-	int k = MPI_Bcast(pixels_in, in_width*in_height*4, MPI_INT, root, MPI_COMM_WORLD);
+	printf("Sending image:");
+	int k = MPI_Bcast(pixels_in, in_width*in_height*4, MPI_UNSIGNED_CHAR, root, MPI_COMM_WORLD);
 	printf("k: %d", k);
 
 
